@@ -11,8 +11,10 @@ import Base.rand
 
 include("bisection.jl")
 include("direct-sampler.jl")
+include("direct-sampler-ar.jl")
 include("find-interval.jl")
 include("util.jl")
+
 include("BaseDistribution.jl")
 include("WeightFunction.jl")
 include("Interval.jl")
@@ -26,8 +28,10 @@ export
 	bisection
 	direct_sampler
 	find_interval
+	log_add
 	log_c
 	log_eval
+	log_sub
 	roots
 end
 

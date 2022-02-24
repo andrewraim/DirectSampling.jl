@@ -16,9 +16,9 @@ priority_weight) where {T1<:WeightFunction, T2<:BaseDistribution}
 		accept = false
 		while !accept && rejections < max_rejections
 			v = rand(Float64, 1)
-			log_u_proposal = step.draw_one(true)
-			log_p_val = step.log_p(log_u_proposal)
-			log_h_val = step.density(log_u_proposal, true, false)
+			log_u_proposal = rand(step, 1, take_log = true)
+			log_p_val = log_p(step, log_u_proposal)
+			log_h_val = pdf(step, log_u_proposal, true, take_log = false)
 			log_ratio = log_p_val - log_h_val - log_M
 
 			if log(v) < log_ratio

@@ -3,22 +3,45 @@ This helper struct is used in the small_rects implementation of Stepdown.
 It represents an interval [x,y] with function values h(x) and h(y).
 """
 struct Interval
-	x::Float64
-	y::Float64
-	fx::Float64
-	fy::Float64
-	function Interval(x, y, fx, fy)
-		if x > y || fx < fy
-			error("x <= y and fx >= fy must be true for a Stepdown Interval")
+	log_x::Float64
+	log_y::Float64
+	log_hx::Float64
+	log_hy::Float64
+	function Interval(log_x, log_y, log_hx, log_hy)
+		if log_x > log_y || log_hx < log_hy
+			error("Require log_x <= log_y and log_hx >= log_hy for Interval")
 		end
-		new(convert(Float64, x),
-			convert(Float64, y),
-			convert(Float64, fx),
-			convert(Float64, fy))
+		new(convert(Float64, log_x),
+			convert(Float64, log_y),
+			convert(Float64, log_hx),
+			convert(Float64, log_hy))
 	end
 end
 
-function area(a::Interval)
-	(a.y - a.x) * (a.fx - a.fy)
+function log_width(a::Interval)
+	log_sub(a.log_y, a.log_x)
 end
+
+function log_height(a::Interval)
+	log_sub(a.log_hy, a.log_hx)
+end
+
+function print(x::Interval; log_scale = false)
+	if log_scale
+		@printf "log_x: %g" x.log_x
+		@printf "log_y: %g" x.log_y
+		@printf "log_h_x: %g" x.log_hx
+		@printf "log_h_y: %g" x.log_hy
+		@printf "width: %g" x.log_width
+		@printf "height: %g" x.log_height
+	else
+		@printf "x: %g\n" exp(x.log_x)
+		@printf "y: %g\n" exp(x.log_y)
+		@printf "h_x: %g\n" exp(x.log_hx)
+		@printf "h_y: %g\n" exp(x.log_hy)
+		@printf "width: %g\n" exp(x.log_width)
+		@printf "height: %g\n" exp(x.log_height)
+	end
+end
+
 

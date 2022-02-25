@@ -1,14 +1,20 @@
 using Plots
+import DirectSampling: direct_sampler, direct_sampler_ar, SMALL_RECTS
 
-include("direct-sampler.jl")
+include("LognormalWeightFunction.jl")
+include("LaplaceBaseDistribution.jl")
 
 z = -10
 mu = 3.5
 sigma2 = 8.5
-rho = 0.01
+lambda = 0.4
 
-w_obj = LognormalWeightFunction(z, mu, sigma2)
-g_obj = DGeomBaseDistribution(rho)
-out = direct_sampler(500000, w_obj, g_obj, tol = 1e-10, N = 100, fill_method = "small_jumps");
+w = LognormalWeightFunction(z, mu, sigma2)
+g = LaplaceBaseDistribution(lambda)
 
-histogram(out, normalize = :probability)
+out = direct_sampler(w, g, n = 5000, N = 100)
+histogram(out, normalize = :probability, bins = 30)
+
+(x, rejections) = direct_sampler_ar(w, g, n = 5000, N = 10)
+histogram(x, normalize = :probability, bins = 30)
+

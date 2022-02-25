@@ -320,7 +320,9 @@ function add(s::Stepdown, log_u)
 
 	# Update cumulative probabilities
 	s.N += 1
-	(areas, cum_probs, norm_const) = steps2probs(s)
+	(areas, cum_probs, norm_const) = steps2probs(s.log_x_vals, s.log_h_vals)
+
+	return s
 end
 
 # Compute normalizing constant and cumulative probabilities based on

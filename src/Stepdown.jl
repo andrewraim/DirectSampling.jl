@@ -2,7 +2,10 @@
 This class represents a step function approximation to the non-increasing
 Pr(A_u) for u in [0,1].
 """
-@enum StepdownKnotMethod equal_steps small_rects
+@enum StepdownKnotMethod begin
+	EQUAL_STEPS
+	SMALL_RECTS
+end
 
 mutable struct Stepdown
 	w::WeightFunction
@@ -33,7 +36,7 @@ function rects(s; take_log = false)
 	log_area = zeros(k-1)
 
 	for i in 1:(k-1)
-		log_area[i] = logsub(log_x2[i], log_x1[i]) + logsub(log_h1[i], log_h2[i])
+		log_area[i] = log_sub(log_x2[i], log_x1[i]) + log_sub(log_h1[i], log_h2[i])
 	end
 
 	if take_log
@@ -63,7 +66,7 @@ function Stepdown(w, g; tol, N, knot_method, priority_weight, log_midpoint)
 	# 	error("z and sigma2 must be nonnegative")
 	# end
 
-	log_distance(x,y) = univariate_distance(log_x, log_y, take_log = true)
+	log_distance(log_x, log_y) = univariate_distance(log_x, log_y, take_log = true)
 
 	# First, make sure the widest possible A_u intersects with [x_lo, x_hi]. If it
 	# doesn't, the rest of the algorithm won't work, so bail out.
@@ -90,27 +93,26 @@ function Stepdown(w, g; tol, N, knot_method, priority_weight, log_midpoint)
 		log_distance, tol = log_delta1)
 
 	# Do a bisection search to find U, the smallest point where P(A_U) = 0.
-	pred_logU(log_u) = log_p(w, g, log_u) < log(1e-10) + log_p(log_L)
+	pred_logU(log_u) = log_p(w, g, log_u) < log(1e-10) + log_p(w, g, log_L)
 	log_delta2 = min(log_L, log(tol))
 	log_U = bisection(log_L, 0, pred_logU, log_midpoint, log_distance,
 		tol = log_delta2)
 
 	# Now fill in points between L and U
-	if knot_method == equal_steps
+	if knot_method == EQUAL_STEPS
 		(a,b,c) = equal_steps(w, g, log_L, log_U, log_prob_max, N)
 		log_x_vals = a
 		log_h_vals = b
 		knot_order = c
-	elseif knot_method == small_rects
-		(a,b,c) = small_rects(w, g, log_L, log_U, log_prob_max, N)
+	elseif knot_method == SMALL_RECTS
+		(a,b,c) = small_rects(w, g, log_L, log_U, log_prob_max,
+			N = N, tol = tol, priority_weight = priority_weight,
+			log_midpoint = log_midpoint)
 		log_x_vals = a
 		log_h_vals = b
 		knot_order = c
 	else
-		msg = string(
-			@sprintf("Unknown method: %d. ", method),
-			"Currently support equal_steps and small_rects")
-		error(msg)
+		error("knot_method must be equal_steps or small_rects")
 	end
 
 	(areas, cum_probs, norm_const) = steps2probs(log_x_vals, log_h_vals)
@@ -142,12 +144,16 @@ function equal_steps(w, g, log_L, log_U, log_prob_max, N)
 	return log_x_vals, log_h_vals, knot_order
 end
 
-function small_rects(w, g, log_L, log_U, log_prob_max; N, tol, priority_weight)
+function small_rects(w, g, log_L, log_U, log_prob_max; N, tol, priority_weight,
+	log_midpoint)
+
+	pw = priority_weight
+
 	# This queue should be in max-heap order by height
 	q = PriorityQueue{Interval,Float64}(Base.Order.Reverse)
 
 	intvl = Interval(log_L, log_U, log_p(w, g, log_L), log_p(w, g, log_U))
-	priority = pw * log_height(intvl)+ (1-pw) * log_width(intvl)
+	priority = pw * log_height(intvl) + (1-pw) * log_width(intvl)
 	enqueue!(q, intvl, priority)
 
 	# Try to be efficient by preallocating log_x_vals and
@@ -173,8 +179,7 @@ function small_rects(w, g, log_L, log_U, log_prob_max; N, tol, priority_weight)
 		int_top = dequeue!(q)
 
 		# Break the interval int_top into two pieces: left and right.
-		log_x_new = log_midpoint(int_top.x, int_top.y)
-		log_x_new = log(x_new)
+		log_x_new = log_midpoint(int_top.log_x, int_top.log_y)
 		log_h_new = log_p(w, g, log_x_new)
 
 		# Add the midpoint to our list of knots
@@ -204,20 +209,27 @@ function small_rects(w, g, log_L, log_U, log_prob_max; N, tol, priority_weight)
 end
 
 function quantile(s::Stepdown, p; take_log = false)
+
+	# @printf "In quantile for Stepdown, p = %g and take_log = %d" p take_log
+	# @printf "\n"
+
+	cum_probs_ext = cat(0, s.cum_probs, dims = (1,1))
+	idx = find_interval(p, cum_probs_ext)
+
 	# Recall that cum_probs is a sorted vector
-	if p < first(s.cum_probs)
+	if idx == 0
 		# p occurs before the first jump. There is no probability yet, so the
 		# quantile is 0.
+		out = -Inf
+	elseif idx >= s.N + 2
 		out = 0
-	elseif p >= last(s.cum_probs)
-		out = 1
 	else
 		# p occurs after the first jump. Use find_interval to locate the two
 		# cutpoints, then do a linear interpolation between them.
-		j1 = find_interval(p, s.cum_probs)
-		j2 = j1 + 1
-		cp1 = s.cum_probs[j1]
-		cp2 = s.cum_probs[j2]
+		j1 = idx
+		j2 = idx + 1
+		cp1 = cum_probs_ext[j1]
+		cp2 = cum_probs_ext[j2]
 		log_x1 = s.log_x_vals[j1]
 		log_x2 = s.log_x_vals[j2]
 
@@ -225,7 +237,7 @@ function quantile(s::Stepdown, p; take_log = false)
 		# the log-scale, since they may be extremely small.
 		# out = x1 + (x2 - x1) * (p - cp1) / (cp2 - cp1)
 		log_ratio = log(p - cp1) - log(cp2 - cp1)
-		out = logadd(logsub(log_x2, log_x1) + log_ratio, log_x1)
+		out = log_add(log_sub(log_x2, log_x1) + log_ratio, log_x1)
 
 		# if true
 		#	@info "Searching for p = " p
@@ -244,14 +256,18 @@ function quantile(s::Stepdown, p; take_log = false)
 	return take_log ? out : exp(out)
 end
 
-function rand(s::Stepdown, n::Int; take_log = false)
+function rand(s::Stepdown; n = 1, take_log = false)
 	u = rand(Float64, n)
-	map(x -> quantile(s, x, take_log = take_log), u)
+	return map(p -> quantile(s, p, take_log = take_log), u)
 end
 
-function pdf(s::Stepdown, x; normalize = true, take_log = false)
+function pdf(s::Stepdown, log_x; normalize = true, take_log = false)
 	# Get the idx such that h_vals[idx] <= log(x) < h_vals[idx+1]
-	idx = find_interval(log(x), s.log_x_vals)
+	idx = find_interval(log_x, s.log_x_vals)
+	out = -Inf
+	if idx <= s.N + 2
+		out = s.log_h_vals[idx]
+	end
 	out = s.log_h_vals[idx]
 	out = normalize ? out - s.norm_const : out
 	return take_log ? out : exp(out)
@@ -262,12 +278,16 @@ end
 # end
 
 function cdf(s::Stepdown, log_x)
-	if (log_x > last(s.log_x_vals))
+	idx = find_interval(log_x, s.log_x_vals)
+
+	if idx == 0
+		out = 0
+	elseif idx >= s.N + 1
 		out = 1
 	else
 		# Get the idx such that h_vals[idx] <= log(x) < h_vals[idx+1]	
-		j1 = find_interval(log(x), s.log_x_vals)
-		j2 = j1 + 1
+		j1 = idx
+		j2 = idx + 1
 		cp1 = s.cum_probs[j1]
 		cp2 = s.cum_probs[j2]
 		log_x1 = s.log_x_vals[j1]
@@ -276,8 +296,8 @@ function cdf(s::Stepdown, log_x)
 		# Do the following computation, but be careful to keep x values on
 		# the log-scale, since they may be extremely small.
 		# out = cp1 + (x - x1) / (x2 - x1) * (cp2 - cp1)
-		log_ratio = logsub(log_x, log_x1) - logsub(log_x2, log_x1) + log(cp2 - cp1)
-		out = exp(logadd(log(cp1), log_ratio))
+		log_ratio = log_sub(log_x, log_x1) - log_sub(log_x2, log_x1) + log(cp2 - cp1)
+		out = exp(log_add(log(cp1), log_ratio))
 	end
 
 	return out
@@ -317,29 +337,29 @@ function steps2probs(log_x_vals, log_h_vals)
 
 	if false
 		# This is a more readable version of the calculation that may be less precise
-		widths = diff(exp(log_x_vals))
-		heights = exp(first(log_h_vals, N+1))
+		widths = diff(exp.(log_x_vals))
+		heights = exp.(first(log_h_vals, N+1))
 		areas = widths * heights
 		norm_const = sum(areas)
 		cum_probs = cumsum(areas) / norm_const
 	else
 		# This version tries to be more precise and do more work on the log-scale
-		log_areas = numeric(N+1)
-		log_cum_areas = numeric(N+1)
+		log_areas = zeros(N+1)
+		log_cum_areas = zeros(N+1)
 
 		log_areas[1] = log_h_vals[1] + log_x_vals[2]
 		log_cum_areas[1] = log_areas[1]
 		for l = 2:(N+1)
-			log_areas[l] = log_h_vals[l] + logsub(log_x_vals[l+1], log_x_vals[l])
+			log_areas[l] = log_h_vals[l] + log_sub(log_x_vals[l+1], log_x_vals[l])
 			arg1 = max(log_cum_areas[l-1], log_areas[l])
 			arg2 = min(log_cum_areas[l-1], log_areas[l])
-			log_cum_areas[l] = logadd(arg1, arg2)
+			log_cum_areas[l] = log_add(arg1, arg2)
 		end
 
 		log_normconst = log_cum_areas[N+1]
-		log_cum_probs = log_cum_areas - log_normconst
-		norm_const = exp(log_normconst)
-		cum_probs = exp(log_cum_probs)
+		log_cum_probs = log_cum_areas .- log_normconst
+		norm_const = exp.(log_normconst)
+		cum_probs = exp.(log_cum_probs)
 	end
 
 	if any(map(isnan, cum_probs))

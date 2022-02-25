@@ -23,7 +23,7 @@ function log_width(a::Interval)
 end
 
 function log_height(a::Interval)
-	log_sub(a.log_hy, a.log_hx)
+	log_sub(a.log_hx, a.log_hy)
 end
 
 function print(x::Interval; log_scale = false)
@@ -32,15 +32,15 @@ function print(x::Interval; log_scale = false)
 		@printf "log_y: %g" x.log_y
 		@printf "log_h_x: %g" x.log_hx
 		@printf "log_h_y: %g" x.log_hy
-		@printf "width: %g" x.log_width
-		@printf "height: %g" x.log_height
+		@printf "width: %g" log_width(x)
+		@printf "height: %g" log_height(x)
 	else
 		@printf "x: %g\n" exp(x.log_x)
 		@printf "y: %g\n" exp(x.log_y)
 		@printf "h_x: %g\n" exp(x.log_hx)
 		@printf "h_y: %g\n" exp(x.log_hy)
-		@printf "width: %g\n" exp(x.log_width)
-		@printf "height: %g\n" exp(x.log_height)
+		@printf "width: %g\n" exp(log_width(x))
+		@printf "height: %g\n" exp(log_height(x))
 	end
 end
 

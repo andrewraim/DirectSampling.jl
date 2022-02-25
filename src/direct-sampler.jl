@@ -3,7 +3,7 @@ function direct_sampler(n, w::T1, g::T2; tol, N, fill_method) where
 	# Use our Stepdown approximation to draw from p(u)
 	step = Stepdown(w, g; tol = tol, N = N, method = fill_method,
 		priority_weight = priority_weight)
-	log_u = rand(step, n; take_log = true)
+	log_u = rand(step; n = n, take_log = true)
 
 	# Draw from g(x | u) for each value of log(u)
 	x = Array{Real}(undef, n)

@@ -60,7 +60,9 @@ function rects(s; take_log = false)
 	return rects
 end
 
-function Stepdown(w, g; tol, N, knot_method, priority_weight, log_midpoint)
+function Stepdown(w, g; tol = 1e-10, N = 50, knot_method = SMALL_RECTS,
+priority_weight = 0.5,
+log_midpoint = geometric_midpoint(log_x, log_y; take_log = true))
 	# TBD: Any error checking??
 	# if z < zero(z) || sigma2 < zero(sigma2)
 	# 	error("z and sigma2 must be nonnegative")
@@ -131,7 +133,7 @@ function equal_steps(w, g, log_L, log_U, log_prob_max, N)
 	log_h_vals[1] = log_prob_max
 
 	# Compute log(U - L)
-	log_span = log_sub(log_U, log_l)
+	log_span = log_sub(log_U, log_L)
 
 	for i = 0:N
 		log_prop = log(i / N)
